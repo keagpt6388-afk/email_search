@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: email-search
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /v1/health
+    autoDeploy: true
+    envVars:
+      - key: EMS_CONTACT_EMAIL   # 운영자 이메일(OpenAlex polite pool·Unpaywall)
+        sync: false
+      - key: EMS_API_KEY         # 설정하면 X-API-Key 필수
+        sync: false
+      - key: EMS_OPENALEX_API_KEY  # 선택(무료 키)
+        sync: false
+      - key: EMS_DART_API_KEY      # 선택(무료 키) — 국내 법인 영문 상호·홈페이지
+        sync: false
+      - key: EMS_WORKERS
+        value: "2"
+      - key: EMS_CORS_ORIGINS
+        value: "*"

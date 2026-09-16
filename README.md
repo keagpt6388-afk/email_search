@@ -86,6 +86,11 @@ payload = to_techgpt([res])   # 응답 표출 규격 JSON
 
 xlsx 출력은 예시 파일(순위 · 전문가 · 소속 …)과 같은 표 형태이며 시트 `이메일 검색`(요약) · `상세`(이메일별) · `로그`(단계별) · `안내` 로 나뉩니다.
 
+## 문서
+
+- [docs/API.md](docs/API.md) — 호출자용 API 설명서(인증·엔드포인트·응답 규격·오류·운영)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 개발자용 소스 설명서(데이터 출처와 활용 방식, 파이프라인 단계, 판정 규칙 수치와 근거, 변경 방법)
+
 ## HTTP API · 테스트 화면
 
 ```bash
@@ -94,14 +99,15 @@ email-search serve --port 8000          # 또는  uvicorn email_search.web:app -
 
 | 경로 | 설명 |
 |---|---|
-| `GET /` | **테스트 화면**. 이름·소속·기술분야를 넣으면 API 를 호출해 좌측에 answer, 우측에 규격대로 그린 표·카드·텍스트(fields·order·link·highlight·format·note 처리), 아래에 원본 JSON 을 보여 줌 |
-| `GET /search?name=&affiliation=&field=` | 한 사람. 도구 호출·브라우저 테스트 겸용 |
-| `POST /search` | `{"name","affiliation","field"}` |
-| `POST /search/batch` | `{"people":[{"name","affiliation","field"}, …]}` 최대 50명 → 표 한 장에 여러 행 |
-| `GET /health` | 상태(OpenAlex 키·예산 소진 여부·DART) |
+| `GET /` | **테스트 화면**. 이름·소속·기술분야(·API 키)를 넣으면 API 를 호출해 좌측에 answer, 우측에 규격대로 그린 표·카드·텍스트(fields·order·link·highlight·format·note 처리), 아래에 원본 JSON |
+| `GET /v1/search?name=&affiliation=&field=` | 한 사람(동기). 도구 호출·브라우저 테스트 겸용 |
+| `POST /v1/search` | `{"name","affiliation","field"}` |
+| `POST /v1/search/batch` | `{"people":[…]}` 최대 50명, 동기(오래 걸림) |
+| `POST /v1/jobs` → `GET /v1/jobs/{id}` | 비동기 작업 등록·조회(여러 사람 권장). `DELETE /v1/jobs/{id}` |
+| `GET /v1/health` | 상태(작업 수·OpenAlex 키·예산 소진 여부·DART) |
 | `GET /docs` | OpenAPI 문서 |
 
-응답은 위 규격 JSON 그대로입니다. 한 사람에 30~90초 걸리므로(공개 출처를 순서대로 조회) 호출 측 타임아웃을 120초 이상으로 두십시오.
+인증은 `EMS_API_KEY` 를 설정하면 `X-API-Key` 헤더 필수. 응답은 위 규격 JSON 그대로이고, 오류는 `{"error":{"code","message"}}`. 한 사람에 30~90초 걸리므로 동기 호출은 타임아웃 120초 이상, 2명 이상은 `/v1/jobs`. 배포는 `Dockerfile`·`render.yaml`. 자세한 내용은 [docs/API.md](docs/API.md).
 
 ## 어떻게 찾나
 
