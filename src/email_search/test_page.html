@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>email_search 테스트</title>
+<style>
+  :root { --bg:#f7f7f5; --fg:#1f2328; --muted:#6b7280; --line:#e5e7eb; --accent:#1d4ed8; --hl:#fff7cc; --card:#fff; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 system-ui, "Malgun Gothic", sans-serif; padding: 16px; }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; } .sub { color: var(--muted); margin-bottom: 16px; }
+  form { display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); min-width: 160px; flex:1; }
+  input { padding:8px; border:1px solid var(--line); border-radius:6px; font-size:14px; }
+  button { padding:9px 16px; border:0; border-radius:6px; background:var(--accent); color:#fff; font-size:14px; cursor:pointer; }
+  button[disabled] { opacity:.6; cursor:wait; }
+  .layout { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1.6fr); gap:16px; margin-top:16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; min-width:0; }
+  .panel h2 { font-size: 13px; color: var(--muted); margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+  .answer { white-space: pre-wrap; }
+  details { border:1px solid var(--line); border-radius:6px; margin-bottom:10px; background:#fff; }
+  summary { padding:8px 10px; cursor:pointer; font-weight:600; }
+  .tbl { overflow-x:auto; padding: 0 10px 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+  th { background:#f3f4f6; white-space:nowrap; }
+  td.num { text-align:right; }
+  .hl { background: var(--hl); }
+  .note, .unit { color: var(--muted); font-size: 12px; padding: 4px 10px 8px; }
+  .cards { display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:10px; padding: 0 10px 10px; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:10px; background:#fff; }
+  .card .t { font-weight:700; } .card .s { color:var(--muted); margin-bottom:6px; }
+  .card .row { display:grid; grid-template-columns: 96px 1fr; gap:6px; padding:3px 0; border-top:1px dashed var(--line); font-size:13px; }
+  .card .row .k { color: var(--muted); } .card .row .v { white-space: pre-wrap; word-break: break-word; }
+  .text { padding: 0 10px 10px; white-space: pre-wrap; }
+  pre { background:#0b1020; color:#e6edf3; padding:10px; border-radius:6px; overflow:auto; font-size:12px; max-height: 520px; }
+  .err { color:#b91c1c; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>email_search 테스트</h1>
+  <div class="sub">입력: 이름 · 소속 · 기술분야 → 공개 출처에서 이메일. 응답은 TECH-GPT V2 응답 표출 규격(v1.1)이며, 우측 패널은 그 규격 그대로(표·카드·텍스트, fields·order·link·highlight·format) 그립니다.</div>
+  <form id="f">
+    <label>이름<input name="name" required placeholder="장진아 또는 Jinah Jang"></label>
+    <label>소속<input name="affiliation" required placeholder="포항공과대학교"></label>
+    <label>기술분야<input name="field" placeholder="3D 바이오프린팅"></label>
+    <button id="go" type="submit">검색</button>
+    <span id="status" class="sub" style="margin:0 0 6px 8px"></span>
+  </form>
+  <div class="layout">
+    <div class="panel"><h2>답변 본문 (answer)</h2><div id="answer" class="answer sub">아직 검색하지 않았습니다.</div></div>
+    <div class="panel"><h2>우측 패널 (table · card · text)</h2><div id="panel"></div></div>
+  </div>
+  <div class="panel" style="margin-top:16px"><h2>원본 JSON</h2><pre id="raw">{}</pre></div>
+</div>
+<script>
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const okUrl = (u, iframe) => /^(https?:)\/\//i.test(u) || (!iframe && /^mailto:/i.test(u));
+// 값 표시 규칙(규격 6절·7절)
+function cell(v, key, spec) {
+  const isLink = (spec.link || []).includes(key);
+  const isFrame = (spec.iframe || []).includes(key);
+  const fmt = (spec.format || {})[key];
+  if (v === null || v === undefined) return "";
+  if (isFrame && !isLink) {
+    const arr = Array.isArray(v) ? v : [v];
+    return arr.map(o => o && o.url && okUrl(o.url, true) ? `<div>${o.text ? `<div class="sub">${esc(o.text)}</div>` : ""}<iframe src="${esc(o.url)}" style="width:100%;height:240px;border:1px solid #e5e7eb"></iframe></div>` : esc(o && o.text || "")).join("");
+  }
+  if (isLink || isFrame) {
+    const arr = Array.isArray(v) ? v : [v];
+    return arr.map(o => (o && typeof o === "object") ? (o.url && okUrl(o.url) ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.text ?? o.url)}</a>` : esc(o.text ?? "")) : esc(o)).join(", ");
+  }
+  if (Array.isArray(v)) return v.map(x => typeof x === "object" ? "" : esc(x)).join(", ");
+  if (typeof v === "object") return "";
+  if (fmt === "number" && typeof v === "number") return esc(v.toLocaleString("en-US"));
+  return esc(v);
+}
+function columns(spec) {
+  const rows = spec.rows || [];
+  const fields = spec.fields || Object.fromEntries([...new Set(rows.flatMap(r => Object.keys(r)))].map(k => [k, k]));
+  const keys = Object.keys(fields);
+  const order = [...(spec.order || []).filter(k => keys.includes(k)), ...keys.filter(k => !(spec.order || []).includes(k))];
+  return { fields, order };
+}
+function renderTable(spec, idx) {
+  const { fields, order } = columns(spec);
+  const hl = new Set(spec.highlight || []);
+  const num = new Set(Object.entries(spec.format || {}).filter(([k, f]) => f === "number").map(([k]) => k));
+  const head = order.map(k => `<th class="${hl.has(k) ? "hl" : ""}">${esc(fields[k])}</th>`).join("");
+  const body = (spec.rows || []).map(r => `<tr>${order.map(k => `<td class="${hl.has(k) ? "hl " : ""}${num.has(k) && typeof r[k] === "number" ? "num" : ""}">${cell(r[k], k, spec)}</td>`).join("")}</tr>`).join("");
+  return `<details open><summary>${esc(spec.caption || `TABLE ${idx}`)}</summary>${spec.unit ? `<div class="unit">단위: ${esc(spec.unit)}</div>` : ""}<div class="tbl"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>${spec.note ? `<div class="note">${esc(spec.note)}</div>` : ""}</details>`;
+}
+function renderCard(spec, idx) {
+  const { fields, order } = columns(spec);
+  if (!spec.title || !(spec.title in fields)) return `<div class="err">card: title 키 '${esc(spec.title)}' 가 fields 에 없어 표시하지 않음</div>`;
+  const hl = new Set(spec.highlight || []);
+  const cards = (spec.rows || []).map(r => {
+    const lines = order.filter(k => k !== spec.title && k !== spec.subtitle && r[k] !== null && r[k] !== undefined && r[k] !== "")
+      .map(k => `<div class="row"><div class="k">${esc(fields[k])}</div><div class="v ${hl.has(k) ? "hl" : ""}">${cell(r[k], k, spec)}</div></div>`).join("");
+    return `<div class="card"><div class="t">${cell(r[spec.title], spec.title, spec)}</div>${spec.subtitle && spec.subtitle in fields && spec.subtitle !== spec.title ? `<div class="s">${cell(r[spec.subtitle], spec.subtitle, spec)}</div>` : ""}${lines}</div>`;
+  }).join("");
+  return `<details open><summary>${esc(spec.caption || `CARD ${idx}`)}</summary>${spec.unit ? `<div class="unit">단위: ${esc(spec.unit)}</div>` : ""}<div class="cards">${cards}</div>${spec.note ? `<div class="note">${esc(spec.note)}</div>` : ""}</details>`;
+}
+function renderText(spec, idx) {
+  // 마크다운은 화면 확인용으로 최소만 처리(제목·굵게·목록·링크). 실제 플랫폼이 렌더링한다
+  let t = esc(spec.content || "");
+  t = t.replace(/^### (.*)$/gm, "<h4>$1</h4>").replace(/^## (.*)$/gm, "<h3>$1</h3>").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/^- (.*)$/gm, "• $1")
+       .replace(/\[([^\]]+)\]\((https?:[^)]+|mailto:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return `<details open><summary>${esc(spec.caption || `TEXT ${idx}`)}</summary><div class="text">${t}</div></details>`;
+}
+function render(resp) {
+  const answer = [], panel = [];
+  let ti = 0, ci = 0, xi = 0;
+  for (const [key, item] of Object.entries(resp)) {
+    if (!item || typeof item !== "object") continue;
+    if (item.type === "answer") answer.push(typeof item.data === "string" ? item.data : JSON.stringify(item.data, null, 2));
+    else if (item.type === "table") (item.data || []).forEach(s => panel.push(renderTable(s, ++ti)));
+    else if (item.type === "card") (item.data || []).forEach(s => panel.push(renderCard(s, ++ci)));
+    else if (item.type === "text") (item.data || []).forEach(s => panel.push(renderText(s, ++xi)));
+    else if (item.type === "chart") panel.push(`<div class="sub">chart '${esc(key)}' 는 이 테스트 화면에서 그리지 않습니다</div>`);
+  }
+  document.getElementById("answer").textContent = answer.join("\n\n") || "(answer 없음)";
+  document.getElementById("panel").innerHTML = panel.join("") || '<div class="sub">우측 패널 항목 없음</div>';
+  document.getElementById("raw").textContent = JSON.stringify(resp, null, 2);
+}
+document.getElementById("f").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const fd = new FormData(ev.target);
+  const body = { name: fd.get("name"), affiliation: fd.get("affiliation"), field: fd.get("field") };
+  const btn = document.getElementById("go"), st = document.getElementById("status");
+  btn.disabled = true; st.textContent = "검색 중… (공개 출처를 순서대로 조회합니다. 30~90초)";
+  const t0 = Date.now();
+  try {
+    const r = await fetch("/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || r.status);
+    render(j);
+    st.textContent = `${Math.round((Date.now() - t0) / 1000)}초`;
+  } catch (e) {
+    st.innerHTML = `<span class="err">실패: ${esc(e.message)}</span>`;
+  } finally { btn.disabled = false; }
+});
+</script>
+</body>
+</html>
