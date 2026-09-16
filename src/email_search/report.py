@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import EmailHit, SearchResult
+from .orgs import host_of
 
 SOURCE_LABEL = {
     "orcid": "ORCID 공개 레코드", "europepmc": "Europe PMC 서지(저자 소속란)", "europepmc_xml": "Europe PMC 전문 XML(저자 태그)", "biorxiv": "bioRxiv/medRxiv 전문 XML",
@@ -72,7 +73,7 @@ def to_techgpt(results: list[SearchResult], caption: str = "이메일 검색 결
             "attribution": best.attribution if best else None,
             "ids": _id_links(r.identifiers) or None,
             "domains": ", ".join(r.official_domains) or None,
-            "homepage": [_link(src, url) for url, src in r.homepages[:3]] or None,
+            "homepage": [_link(f"{host_of(url)} ({src})", url) for url, src in dict(r.homepages[:3]).items()] or None,
         })
         rows_card.append({
             "name": r.person.name, "affil": r.person.affiliation, "field": r.person.field or None,
@@ -84,7 +85,7 @@ def to_techgpt(results: list[SearchResult], caption: str = "이메일 검색 결
             "ids": _id_links(r.identifiers) or None,
             "affil_names": ", ".join(r.affiliation_names[:6]) or None,
             "domains": ", ".join(f"{d} ({'·'.join(s)})" for d, s in r.official_domains.items()) or None,
-            "homepage": [_link(src, url) for url, src in r.homepages[:4]] or None,
+            "homepage": [_link(f"{host_of(url)} ({src})", url) for url, src in dict(r.homepages[:4]).items()] or None,
             "log": "\n".join(f"- {x}" for x in r.log),
             "elapsed": f"{r.elapsed_s:.0f}초",
         })
